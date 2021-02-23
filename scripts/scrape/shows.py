@@ -20,17 +20,20 @@ class Show:
         self.top_reviewers=reviewers
 
     
-def retrieve_top_shows(num_shows,users_per_show):
+def retrieve_top_shows(num_shows):
     series=[link_to_id(x) for x in get_series(num_shows)]
     shows=[]
+    c=0
     for serie in series:
         try:
             show=Show(serie)
-            show.extract_top_reviewers(users_per_show)
             shows.append(show)
             print("got {}!".format(serie))
+            c=0
         except:
             print("didn't get",serie)
+            c+=1
+            if c==3: print(input())
     return shows
     
 if __name__=="__main__":

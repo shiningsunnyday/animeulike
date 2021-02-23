@@ -206,16 +206,15 @@ def pg_reviews(link,ind):
 
 def user_ratings(name,ind):#ind is any unique identifier for user
     pg_link=lambda i:"https://myanimelist.net/profile/{}/reviews?p={}".format(name,i)
-    reviews=[]; l=0; i=0;
+    reviews=[]
+    i=-1
     while True:
         l=len(reviews)
         i+=1
         try:
             link=pg_link(i)
             reviews.extend(pg_reviews(link,ind))
-            print("#reviews from {} is now {}".format(name,len(reviews)))
-        except:
-            break
+        except: break
     return reviews
         
 def get_mal_top_users():
@@ -259,9 +258,6 @@ def write_id_username(users,path='data/id_to_username.txt'):
 # In[ ]:
 
 if __name__ == "__main__":
-    ratings=get_mal_user_ratings() #[of form [index of user,anime id,#helpful,rating]]
-    np.savetxt('data/user_ratings.txt',ratings,'%d')
-    users=get_mal_top_users()
-    write_id_username(users)
+    print(user_ratings("tazillo","tazillo"))
 
 
