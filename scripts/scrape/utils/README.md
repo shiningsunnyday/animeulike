@@ -1,4 +1,5 @@
 In order to use __init__, you must have the following files in data/:
+
 	read_shows.txt
 	read_users.txt
 	shows_to_process.txt
@@ -7,6 +8,7 @@ In order to use __init__, you must have the following files in data/:
 
 
 The following requirements:
+
 	(Task 0)
 	A populated shows_to_process.txt (input)
 	An empty usernames_to_process.txt (output)
