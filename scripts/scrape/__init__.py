@@ -1,4 +1,4 @@
-from shows import *
+from scrape.shows import *
 import os
 from multiprocessing import Pool
 

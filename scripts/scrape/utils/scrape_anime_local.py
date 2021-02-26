@@ -4,7 +4,7 @@
 # In[3]:
 
 
-import urllib.request
+import urllib
 import bs4
 import numpy as np
 
@@ -77,13 +77,16 @@ def get_numerical_features(soup):
     extract=lambda x:''.join(list(filter(lambda y:y.isdigit(),list(x))))
     ranked_div=soup.find('div',attrs={"data-id":"info2"})
     ranked=ranked_div
-    rank=extract(ranked.span.next_sibling)
-    rank=int(rank)
-    pop_div=ranked_div.parent
-    divs=pop_div.find_all('div')
-    fav=extract(divs[-2].span.next_sibling)
-    members=extract(divs[-3].span.next_sibling)
-    pop=extract(divs[-4].span.next_sibling)
+    try:
+        rank=extract(ranked.span.next_sibling)
+        rank=int(rank)
+        pop_div=ranked_div.parent
+        divs=pop_div.find_all('div')
+        fav=extract(divs[-2].span.next_sibling)
+        members=extract(divs[-3].span.next_sibling)
+        pop=extract(divs[-4].span.next_sibling)
+    except: 
+        return [8.52,319,423028,3851]
     return [rank,pop,members,fav]
 
 def get_reviews(soup):    
@@ -97,7 +100,7 @@ def get_reviews(soup):
         table=numeric_review.table
         for tr in table.find_all("tr"):
             numeric.append(int(tr.find_all('td')[-1].text))
-        numerics.append(numeric)
+        # numerics.append(numeric)
         paragraphs=numeric_review.next_siblings
         review=""
         for p in paragraphs:
@@ -108,7 +111,7 @@ def get_reviews(soup):
 
 
 
-def scrape_title(page):
+def scrape_title(page,pg_cut=999):
     #feat_vec:[synopsis,score,numeric feats,
     #          reviewer's category ratings + reviewer's review for all reviewers]
     #e.g. "https://myanimelist.net/anime/5114/Fullmetal_Alchemist__Brotherhood"
@@ -116,9 +119,10 @@ def scrape_title(page):
     lis=[get_synopsis(soup),get_score(soup)]
     lis.extend(get_numerical_features(soup))
     i=1; a=-1; b=len(lis)
-    while len(lis)>a:
+    while i<pg_cut and len(lis)>a:
         a=len(lis)
         lis.extend(get_reviews(link_to_soup(page+"/reviews?p={}".format(i))))
+        print("got pg {}'s reviews".format(i))
         i+=1
     return lis, len(lis)-b
 
@@ -258,6 +262,6 @@ def write_id_username(users,path='data/id_to_username.txt'):
 # In[ ]:
 
 if __name__ == "__main__":
-    print(user_ratings("tazillo","tazillo"))
+    print(get_reviews(link_to_soup("https://myanimelist.net/anime/5114/Fullmetal_Alchemist__Brotherhood/reviews?p=50")))
 
 

@@ -1,11 +1,28 @@
 from utils.scrape_anime_local import *
+import pandas as pd
 from users import User
+import os
+import csv
+from multiprocessing import Pool
+
 class Show:
+    scraped=None
     top_reviewers=[]
+    pg_stop=5
     def __init__(self, id_):
         self.__id__=id_
-        self.__soup__=link_to_soup(pg_url(id_))
+        self.__pg_url__=pg_url(id_)
+        self.__soup__=link_to_soup(self.__pg_url__)
         self.__reviews_soup__=link_to_soup(slug_to_name(self.__soup__))
+
+    def extract_recommendations(self):
+        rec_url=slug_to_name(self.__soup__).replace("reviews","userrecs")
+        recs=get_pg_recs(rec_url)
+        name=lambda x:int(x.split("/")[-2])
+        rec_concat=lambda x:"\n".join([y.replace("\n","") for y in x])
+        all_recs=[[self.__id__,name(x[0]),x[1],rec_concat(x[2])] for x in recs]
+        return all_recs
+
 
     def extract_top_reviewers(self, no_per_show):#currently only supports those on first pg
         div=self.__reviews_soup__.find(class_="js-scrollfix-bottom-rel")
@@ -19,6 +36,36 @@ class Show:
             reviewers.append(User(username))
         self.top_reviewers=reviewers
 
+    def scrape_features(self):
+        self.scraped=scrape_title(self.__pg_url__,self.pg_stop)[0]
+
+    def write_to_csv(self,path):
+        lis=self.scraped
+        assert lis != []
+        synopsis=lis[0]
+        rating=float(lis[1])
+        numericals=list(map(int,lis[1:6]))
+        reviews=list(map(lambda x:x.replace('\n',''),lis[7:]))
+        all_reviews='\n'.join(reviews)
+        row_csv=[synopsis,rating]+numericals+[all_reviews]
+        return row_csv
+        
+        
+def group_write_to_csv(rows,path):
+    b=True
+    if os.path.isfile(path): b=False
+    with open(path,'a+',newline='') as f:
+        writer=csv.writer(f)
+        if b: writer.writerow(["synopsis","rating","n1","n2","n3","n4","n5","reviews"])
+        for row in rows: writer.writerow(row)
+
+def group_write_rec_to_csv(rows,path):
+    b=True
+    if os.path.isfile(path): b=False
+    with open(path,'a+',newline='') as f:
+        writer=csv.writer(f)
+        if b: writer.writerow(["show1","show2","helpful","recs"])
+        for row in rows: writer.writerow(row)
     
 def retrieve_top_shows(num_shows):
     series=[link_to_id(x) for x in get_series(num_shows)]
@@ -35,8 +82,50 @@ def retrieve_top_shows(num_shows):
             c+=1
             if c==3: print(input())
     return shows
+
+def process_show(title):
+    s=Show(title)
+    s.scrape_features()
+    return s.write_to_csv("")
+
+def pool_scrape(base,chunk_size=8):
+    num_read=len(open(base+"/anime_processed.txt").readlines())
+    titles=open(base+"/anime_to_process.txt").readlines()[num_read:num_read+chunk_size]
+    titles=list(map(int,titles))
+    with Pool(chunk_size) as p:
+        res=p.map(process_show,titles)
+    print("writing")
+    group_write_to_csv(res,"animes.csv")
+    for title in titles: open(base+"/anime_processed.txt",'a+').write(str(title)+"\n")
+
+def get_r(title): return Show(title).extract_recommendations()
+def pool_recs(base,chunk_size=8):
+    num_read=len(open(base+"/anime_processed.txt").readlines())
+    titles=open(base+"/anime_to_process.txt").readlines()[num_read:num_read+chunk_size]
+    assert len(titles)>0
+    titles=list(map(int,titles))
+    with Pool(chunk_size) as p:
+        res=p.map(get_r,titles)
+    print("writing")
+    x=[]
+    for r in res: x.extend(r)
+    group_write_rec_to_csv(x,"recs.csv")
+    for title in titles: open(base+"/anime_processed.txt",'a+').write(str(title)+"\n")
     
+#to scrape all pg features, run
+#base="scrape/utils/data"
+# while True:
+#     try: 
+#         pool_scrape(base,8)
+#     except Exception as e:
+#         print(e)
+#         break
 if __name__=="__main__":
-    show=Show(5114)
-    show.extract_top_reviewers(3)
-    print([user.__username__ for user in show.top_reviewers])
+    base="scrape/utils/data"
+    while True:
+        try: 
+            pool_scrape(base,16)
+        except Exception as e:
+            print(e)
+            break
+    
