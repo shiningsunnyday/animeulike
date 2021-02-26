@@ -101,14 +101,18 @@ def pool_scrape(base,chunk_size=8):
 def get_r(title): return Show(title).extract_recommendations()
 def pool_recs(base,chunk_size=8):
     num_read=len(open(base+"/anime_processed.txt").readlines())
-    titles=open(base+"/anime_to_process.txt").readlines()[num_read:num_read+chunk_size]
+    all_titles=list(map(int,open(base+"/anime_to_process.txt").readlines()))
+    titles_set=set(all_titles)
+    titles=all_titles[num_read:num_read+chunk_size]
     assert len(titles)>0
     titles=list(map(int,titles))
     with Pool(chunk_size) as p:
         res=p.map(get_r,titles)
-    print("writing")
+    
     x=[]
-    for r in res: x.extend(r)
+    for r in res: 
+        x.extend(list(filter(lambda y:y[1] in titles_set,r)))
+    print("writing")
     group_write_rec_to_csv(x,"recs.csv")
     for title in titles: open(base+"/anime_processed.txt",'a+').write(str(title)+"\n")
     
@@ -124,7 +128,7 @@ if __name__=="__main__":
     base="scrape/utils/data"
     while True:
         try: 
-            pool_scrape(base,16)
+            pool_recs(base,16)
         except Exception as e:
             print(e)
             break
