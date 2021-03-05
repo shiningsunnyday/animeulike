@@ -2,9 +2,13 @@ from torch.utils.data import Dataset
 import pandas as pd
 import numpy as np
 from abc import abstractmethod
+import os
+
+
 
 class RecommendationDataset(Dataset):
     def __init__(self, index_path, animes_path, recommendations_path):
+        print(os.listdir())
         self.rc_path = recommendations_path
         self.rc_data = pd.read_csv(self.rc_path)
         
@@ -36,4 +40,5 @@ class RecommendationDataset(Dataset):
 
 if __name__ == "__main__":
     rec_data=RecommendationDataset("anime_index_map.txt","animes.csv","recs.csv")
-    print(rec_data.__getitem__(2))
+    # print(rec_data.__getitem__(2))
+    pass

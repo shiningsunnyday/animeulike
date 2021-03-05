@@ -1,17 +1,21 @@
 from utils.scrape_anime_local import *
+
+
 import pandas as pd
 from users import User
 import os
 import csv
 from multiprocessing import Pool
 
+
+
 class Show:
     scraped=None
     top_reviewers=[]
-    pg_stop=5
+    pg_stop=50
     def __init__(self, id_):
         self.__id__=id_
-        self.__pg_url__=pg_url(id_)
+        self.__pg_url__=pg_url(id_).rstrip('\n')
         self.__soup__=link_to_soup(self.__pg_url__)
         self.__reviews_soup__=link_to_soup(slug_to_name(self.__soup__))
 
@@ -25,9 +29,12 @@ class Show:
 
 
     def extract_top_reviewers(self, no_per_show):#currently only supports those on first pg
+        print("hey!")
         div=self.__reviews_soup__.find(class_="js-scrollfix-bottom-rel")
+        
         reviews=div.find_all("div",class_="borderDark")[:no_per_show]
         reviewers=[]
+
         for review in reviews:
             div=child_find_all(review.div)[1]
             table=div.table
@@ -67,44 +74,40 @@ def group_write_rec_to_csv(rows,path):
         if b: writer.writerow(["show1","show2","helpful","recs"])
         for row in rows: writer.writerow(row)
     
-def retrieve_top_shows(num_shows):
-    series=[link_to_id(x) for x in get_series(num_shows)]
-    shows=[]
-    c=0
-    for serie in series:
-        try:
-            show=Show(serie)
-            shows.append(show)
-            print("got {}!".format(serie))
-            c=0
-        except:
-            print("didn't get",serie)
-            c+=1
-            if c==3: print(input())
-    return shows
+
 
 def process_show(title):
     s=Show(title)
     s.scrape_features()
     return s.write_to_csv("")
 
-def pool_scrape(base,chunk_size=8):
-    num_read=len(open(base+"/anime_processed.txt").readlines())
-    titles=open(base+"/anime_to_process.txt").readlines()[num_read:num_read+chunk_size]
-    titles=list(map(int,titles))
-    with Pool(chunk_size) as p:
-        res=p.map(process_show,titles)
-    print("writing")
-    group_write_to_csv(res,"animes.csv")
-    for title in titles: open(base+"/anime_processed.txt",'a+').write(str(title)+"\n")
+import pdb 
 
-def get_r(title): return Show(title).extract_recommendations()
-def pool_recs(base,chunk_size=8):
-    num_read=len(open(base+"/anime_processed.txt").readlines())
-    all_titles=list(map(int,open(base+"/anime_to_process.txt").readlines()))
-    titles_set=set(all_titles)
-    titles=all_titles[num_read:num_read+chunk_size]
+def pool_scrape(output_file,target_file,prog_file,base,chunk_size=1):
+    titles=get_batch(target_file,prog_file,chunk_size)
+    inp=lambda x:int(x)
+    out=lambda x:list(map(lambda y:tuple([y]),x))
+    try:
+        res=pool_res(process_show,titles,inp,out,chunk_size)
+        assert len(res)>0
+        print("writing")
+        group_write_to_csv(res,output_file)
+        write_res(prog_file,titles,"")
+    except Exception as e:
+        print(e)
+        raise AssertionError
+        
+    
+
+def get_r(title): 
+    return Show(title).extract_recommendations()
+
+def pool_recs(output_file,target_file,prog_file,base,chunk_size=8):
+    titles=get_batch(output_file,prog_file,chunk_size)
     assert len(titles)>0
+    inp=lambda x:int(x)
+
+
     titles=list(map(int,titles))
     with Pool(chunk_size) as p:
         res=p.map(get_r,titles)
@@ -117,19 +120,22 @@ def pool_recs(base,chunk_size=8):
     for title in titles: open(base+"/anime_processed.txt",'a+').write(str(title)+"\n")
     
 #to scrape all pg features, run
-#base="scrape/utils/data"
+
 # while True:
 #     try: 
 #         pool_scrape(base,8)
 #     except Exception as e:
 #         print(e)
 #         break
+
 if __name__=="__main__":
-    base="scrape/utils/data"
+    base=os.path.dirname(__file__)
     while True:
+        output_file=os.path.join(os.getcwd(),"10000_animes.csv")
+        target_file=os.path.join(base,"utils/data","10000_shows_to_process.txt")
+        prog_file=os.path.join(base,"utils/data","10000_anime_processed.txt")
         try: 
-            pool_recs(base,16)
-        except Exception as e:
-            print(e)
+            pool_scrape(output_file,target_file,prog_file,base,32)
+        except:
             break
     

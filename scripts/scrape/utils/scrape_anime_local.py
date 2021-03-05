@@ -4,9 +4,14 @@
 # In[3]:
 
 
-import urllib
+import urllib.request
 import bs4
+from iteration_utilities import flatten
 import numpy as np
+import os
+
+from multiprocessing import Pool
+
 
 MAL_TOP_USER_LINK="https://myanimelist.net/reviews.php?st=mosthelpful"
 CROLL_LINK="https://www.crunchyroll.com/videos/anime"
@@ -16,6 +21,8 @@ CROLL_LINK="https://www.crunchyroll.com/videos/anime"
 
 
 def link_to_soup(link,html=False):
+    link=link.encode("ascii",'ignore')
+    link=link.decode()
     source = urllib.request.urlopen(link).read()
     soup=bs4.BeautifulSoup(source,'lxml' if html else 'html.parser')
     return soup
@@ -44,19 +51,73 @@ def pg_url(id_,reviews=False):
     s+="{}".format(id_)
     if reviews: s=slug_to_name(s)
     return s
-        
 
-def get_series(num_shows):
+def get_pg(i):
     links=[]
-    for pg in range(0,(num_shows-1)//50+1):
-        url="https://myanimelist.net/topanime.php?limit={}".format(50*pg)
-        soup=link_to_soup(url)
-        trs=soup.find_all("tr",class_="ranking-list")
-        for tr in trs:
-            td=tr.find_all('td')[1]
-            links.append(td.a['href'])
-            if len(links)==num_shows: break
+    url="https://myanimelist.net/topanime.php?limit={}".format(50*int(i))
+    soup=link_to_soup(url)
+    trs=soup.find_all("tr",class_="ranking-list")
+    for tr in trs:
+        td=tr.find_all('td')[1]
+        link=td.a['href']
+        links.append(int(link.split("/")[-2]))
     return links
+
+def write_res(output_file,res,app="\n"):
+    with open(output_file,'a+') as f:
+        for r in res:
+            f.write("{}{}".format(str(r),app))
+
+def write_prog(progress_file,out):
+    with open(progress_file,'a+') as f:
+        for o in out: f.write("{}".format(str(o)))
+
+def get_batch(output_file,progress_file,batch_size):
+    if not os.path.isfile(output_file):
+        f=open(output_file,'w+')
+        f.close()
+    if not os.path.isfile(progress_file):
+        f=open(progress_file,'w+')
+        f.close()
+    f=open(progress_file,'r')
+    num_read=len(f.readlines())
+    print(num_read,"read")
+    return open(output_file,"r").readlines()[num_read:num_read+batch_size]
+
+
+def setup_shows_to_retrieve(num_shows):
+    fil=os.path.dirname(__file__)
+    target_file=os.path.join(fil,"data/pages_to_process.txt")
+    prog_file=os.path.join(fil,"data/processed_pages.txt")
+    out_file=os.path.join(fil,"data/10000_shows_to_process.txt")
+    if not os.path.isfile(target_file):
+        with open(target_file,'w+') as f:
+            for pg in range(0,(num_shows-1)//50+1): 
+                f.write("{}\n".format(pg)) 
+
+    if not os.path.isfile(prog_file):
+        f=open(prog_file,'w+')
+        f.close()
+    return target_file,prog_file,out_file
+
+def get_series(target_file,prog_file,out_file,chunk_size=32):
+    links=[]
+    to_read=get_batch(target_file,prog_file,chunk_size)
+    with Pool(chunk_size) as p:
+        res=p.map(get_pg,to_read)
+        assert len(res)>0
+        res=list(flatten(res))
+    write_res(out_file,res)
+    write_prog(prog_file,to_read)
+
+def retrieve_top_shows(num_shows):
+    target_file,prog_file,out_file=setup_shows_to_retrieve(num_shows)
+    if len(open(prog_file,"r").readlines())<num_shows:
+        get_series(target_file,prog_file,out_file)
+        return False
+    return True
+
+
 
 
 # In[6]:
@@ -96,32 +157,37 @@ def get_reviews(soup):
     #every category is rating/10, [overall,story,animation,sound,character,enjoyment]
     numerics=[]
     for numeric_review in numeric_reviews:
-        numeric=[]
-        table=numeric_review.table
-        for tr in table.find_all("tr"):
-            numeric.append(int(tr.find_all('td')[-1].text))
-        # numerics.append(numeric)
+        # numeric=[]
+        # table=numeric_review.table
+        # for tr in table.find_all("tr"):
+        #     numeric.append(int(tr.find_all('td')[-1].text))
+        # # numerics.append(numeric)
         paragraphs=numeric_review.next_siblings
         review=""
         for p in paragraphs:
             if type(p)==bs4.element.Tag and p.name=="span": break
-            elif type(p)==bs4.NavigableString: review+=p
+            elif type(p)==bs4.NavigableString: review+=(p.encode('ascii','ignore').decode())
         numerics.append(review)
     return numerics
 
 
 
-def scrape_title(page,pg_cut=999):
+def scrape_title(page,pg_cut=99999):
     #feat_vec:[synopsis,score,numeric feats,
     #          reviewer's category ratings + reviewer's review for all reviewers]
     #e.g. "https://myanimelist.net/anime/5114/Fullmetal_Alchemist__Brotherhood"
     soup=link_to_soup(page)
-    lis=[get_synopsis(soup),get_score(soup)]
+    lis=[get_synopsis(soup).encode('ascii','ignore').decode(),get_score(soup)]
     lis.extend(get_numerical_features(soup))
     i=1; a=-1; b=len(lis)
     while i<pg_cut and len(lis)>a:
         a=len(lis)
-        lis.extend(get_reviews(link_to_soup(page+"/reviews?p={}".format(i))))
+        try:
+            sp=link_to_soup(page+"/reviews?p={}".format(i))
+            lis.extend(get_reviews(sp))
+        except:
+            print("oh no")
+            break
         print("got pg {}'s reviews".format(i))
         i+=1
     return lis, len(lis)-b
@@ -194,7 +260,10 @@ def get_pg_recs(page):
 def pg_reviews(link,ind):
     # returns [[id,#helpful,#rating]]
     ratings=[]
-    soup=link_to_soup(link)
+    try:
+        soup=link_to_soup(link)
+    except:
+        return ratings
     reviews=[x.div for x in soup.find_all("div",class_="borderDark")]
     for review in reviews:
         rating=review.div.find_all("div")[-1].text
@@ -215,10 +284,10 @@ def user_ratings(name,ind):#ind is any unique identifier for user
     while True:
         l=len(reviews)
         i+=1
-        try:
-            link=pg_link(i)
-            reviews.extend(pg_reviews(link,ind))
-        except: break
+        link=pg_link(i)
+        reviews.extend(pg_reviews(link,ind))
+        if len(reviews)==l:
+            break
     return reviews
         
 def get_mal_top_users():
@@ -260,6 +329,24 @@ def write_id_username(users,path='data/id_to_username.txt'):
 
 
 # In[ ]:
+
+def process_show(show_id,no_per):
+    try:
+        show=Show(show_id)
+    except UnicodeEncodeError:
+        print(show_id,"BAD")
+    show.extract_top_reviewers(no_per)
+    return show.top_reviewers
+
+
+def pool_res(func,inp,inp_map,out_map,num_processes):
+
+    with Pool(num_processes) as p:
+        inp=[inp_map(x) for x in inp]
+        res=p.starmap(func,inp) if isinstance(inp[0],list) else p.map(func,inp)
+        assert len(res)>0
+        res=list(map(out_map,res))
+    return list(flatten(res))
 
 if __name__ == "__main__":
     print(get_reviews(link_to_soup("https://myanimelist.net/anime/5114/Fullmetal_Alchemist__Brotherhood/reviews?p=50")))
