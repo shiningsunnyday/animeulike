@@ -18,6 +18,7 @@ Sorry the repo is a bit disorganized, with some redundancies, but here's a quick
     ├── recs                 # Written inter-item recommendations
     ├── scrape               # Map and reduce pipeline for first scraping popular shows then discovering users from reviews
     ├── split                # Script used to split for training, val and test
+    training                 # Code used for experiments
 
 ## Cite
 
