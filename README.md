@@ -3,6 +3,8 @@
 This is the data collection, preprocessing and preparation code for the AnimeULike dataset, deposited with doi ([here](https://doi.org/10.7910/DVN/PT14ML)).
 Sorry the repo is a bit disorganized, with some redundancies, but here's a quickstart navigation. Please reach out so I can walk you through in more depth.
 
+To run baselines (CTR) and (Heater) refer to linked forked repos: [CTR](https://github.com/shiningsunnyday/Collaborative-Topic-Modeling) and [Heater](https://github.com/shiningsunnyday/Heater--Cold-Start-Recommendation).
+
 ## Contents
 
 - [Contents](#contents)
